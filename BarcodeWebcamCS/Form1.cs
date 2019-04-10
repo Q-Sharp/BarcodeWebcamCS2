@@ -53,20 +53,31 @@ namespace BarcodeWebcamCS
 
         private void timer1_Tick(object sender, EventArgs e)
         {
-            var Reader = new BarcodeReader();
-            var result = Reader.Decode((Bitmap)pictureBox1.Image);
+            var oReader = new BarcodeReader();
+            oReader.AutoRotate = true;
+            oReader.Options.TryHarder = true;
+            var oResult = oReader.Decode((Bitmap)pictureBox1.Image);
 
             try
             {
-                var decoded = result.ToString().Trim();
+                
+                var decoded = oResult.ToString().Trim();
                 if (decoded != "")
-                {
-                    timer1.Stop();
-                    MessageBox.Show(decoded);
-                    //Form2 form = new Form2();
-                    //form.Show();
-                    //this.Hide();
+                {                   
+                    oLabel.Text = decoded;
 
+                    var myPen = new Pen(Color.Black);
+                    var formGraphics = this.CreateGraphics();
+
+                    var x = (int)oResult.ResultPoints[0].X;
+                    var y = (int)oResult.ResultPoints[0].Y;
+
+                    var w = (int)oResult.ResultPoints[1].X - (int)oResult.ResultPoints[0].X;
+                    var h = (int)oResult.ResultPoints[1].Y - (int)oResult.ResultPoints[0].Y;
+
+                    formGraphics.DrawRectangle(myPen, new Rectangle(x, y, w, h));
+                    myPen.Dispose();
+                    formGraphics.Dispose();
                 }
             }
             catch (Exception)
