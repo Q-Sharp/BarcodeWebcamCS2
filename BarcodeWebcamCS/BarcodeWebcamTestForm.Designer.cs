@@ -1,6 +1,6 @@
 ﻿namespace BarcodeWebcamCS
 {
-    partial class Form1
+    partial class BarcodeWebcamTestForm
     {
         /// <summary>
         /// Required designer variable.
