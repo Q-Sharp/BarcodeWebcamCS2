@@ -1,76 +1,48 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Drawing;
+﻿using Barcam;
+using System;
 using System.Linq;
-using System.Text;
-using System.IO;
-using AForge;
-using AForge.Video;
-using ZXing;
-using ZXing.Aztec;
-using System.Threading.Tasks;
 using System.Windows.Forms;
-using AForge.Video.DirectShow;
 
 namespace BarcodeWebcamCS
 {
     public partial class BarcodeWebcamTestForm : Form
     {
-        private VideoCaptureDevice CapureDevice;
-        private FilterInfoCollection CaptureDevices;
+        private Barcammer oBarcam;
 
         public BarcodeWebcamTestForm() => InitializeComponent();
 
         private void Form1_Load(object sender, EventArgs e)
         {
-            CaptureDevices = new FilterInfoCollection(FilterCategory.VideoInputDevice);
+            oBarcam = Barcammer.Create();
 
-            foreach (FilterInfo Device in CaptureDevices)
-                comboBox1.Items.Add(Device.Name);
+            comboBox1.Items.AddRange(oBarcam.DeviceNames.ToArray());
 
-            if(comboBox1.Items.Count > 0)
+            if (comboBox1.Items.Count > 0)
                 comboBox1.SelectedIndex = 0;
         }
 
         private void button1_Click(object sender, EventArgs e)
         {
-            CapureDevice = new VideoCaptureDevice(CaptureDevices[comboBox1.SelectedIndex].MonikerString);
-            CapureDevice.NewFrame += (s, a) => pictureBox1.Image = (Bitmap)a.Frame.Clone();
-            CapureDevice.Start();
+            oBarcam.SetDevice((string)comboBox1.SelectedItem);
+            oBarcam.StartWebcamBarcodeCapture();
 
+            oBarcam.ResultFound += oBarcam_ResultFound;
+            oBarcam.BitmapChanged += OBarcam_BitmapChanged;
         }
 
-        private void timer1_Tick(object sender, EventArgs e)
+        private void OBarcam_BitmapChanged(object sender, Barcammer.BitmapEventArgs e)
         {
-            var oReader = new BarcodeReader
-            {
-                AutoRotate = true
-            };
-            var oResult = oReader.Decode((Bitmap)pictureBox1.Image);
-
             try
             {
-                var decoded = oResult?.ToString()?.Trim();
-
-                if (decoded != "")               
-                    oLabel.Text = decoded;
+                pictureBox1.Image = e.Bitmap;
             }
-            catch (Exception)
+            catch(Exception)
             {
 
             }
         }
 
-        private void button2_Click(object sender, EventArgs e)
-        {
-            timer1.Enabled = true;
-            timer1.Start();
-        }
-
-        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
-        {
-            if (CapureDevice.IsRunning == true)
-                CapureDevice.Stop();
-        }
+        private void oBarcam_ResultFound(object sender, Barcammer.BarcammerEventArgs e) => oLabel.Invoke(new Action(() => oLabel.Text = e.Result));
+        private void Form1_FormClosing(object sender, FormClosingEventArgs e) => oBarcam.Dispose();
     }
 }
