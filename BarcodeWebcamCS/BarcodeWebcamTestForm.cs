@@ -23,14 +23,12 @@ namespace BarcodeWebcamCS
 
         private void button1_Click(object sender, EventArgs e)
         {
-            oBarcam.SetDevice((string)comboBox1.SelectedItem);
-            oBarcam.StartWebcamBarcodeCapture();
-
+            oBarcam.SetDevice((string)comboBox1.SelectedItem).StartWebcamBarcodeCapture();
             oBarcam.ResultFound += oBarcam_ResultFound;
-            oBarcam.BitmapChanged += OBarcam_BitmapChanged;
+            oBarcam.BitmapChanged += oBarcam_BitmapChanged;
         }
 
-        private void OBarcam_BitmapChanged(object sender, Barcammer.BitmapEventArgs e)
+        private void oBarcam_BitmapChanged(object sender, Barcammer.BitmapEventArgs e)
         {
             try
             {

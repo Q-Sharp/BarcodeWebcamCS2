@@ -5,7 +5,7 @@ VisualStudioVersion = 15.0.28307.539
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarcodeWebcamCS", "BarcodeWebcamCS\BarcodeWebcamCS.csproj", "{9E8208CB-475A-4A67-BB32-C7F7C164091C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Barcam", "..\Barcam\ClassLibrary1\Barcam.csproj", "{26B2B926-B756-4147-84DE-7EE901D88C39}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Barcam", "Barcam\Barcam.csproj", "{26B2B926-B756-4147-84DE-7EE901D88C39}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -66,8 +66,8 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\Barcam\ClassLibrary1\Barcam.csproj">
-      <Project>{26B2B926-B756-4147-84DE-7EE901D88C39}</Project>
+    <ProjectReference Include="..\Barcam\Barcam.csproj">
+      <Project>{26b2b926-b756-4147-84de-7ee901d88c39}</Project>
       <Name>Barcam</Name>
     </ProjectReference>
   </ItemGroup>
