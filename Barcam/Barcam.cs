@@ -61,12 +61,7 @@ namespace Barcam
         {
             if (CapureDevice != null)
             {
-                CapureDevice.VideoResolution = CapureDevice.VideoCapabilities
-                    .GroupBy(x => x, x => x.BitCount, (x, y) => new { VideoCapability = x, BitCounts = y })
-                    .Where(x => x.BitCounts.Max() == x.VideoCapability.BitCount)
-                    .Select(x => x.VideoCapability)
-                    .FirstOrDefault();
-
+                CapureDevice.VideoResolution = CapureDevice.VideoCapabilities.LastOrDefault();
                 CapureDevice.NewFrame += CapureDevice_NewFrame;
                 CapureDevice.Start();
             }
