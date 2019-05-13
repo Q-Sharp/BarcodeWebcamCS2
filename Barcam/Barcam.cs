@@ -1,135 +1,164 @@
-﻿using AForge.Video.DirectShow;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using AForge.Video;
-using ZXing;
 using System.Drawing;
 using System.Drawing.Imaging;
-using System.Windows.Media.Imaging;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using AForge.Video;
+using AForge.Video.DirectShow;
+using ZXing;
 
 namespace Barcam
 {
-    public class Barcammer : IDisposable
-    {
-        private IEnumerable<FilterInfo> Devices = new FilterInfoCollection(FilterCategory.VideoInputDevice).Cast<FilterInfo>();
-        private FilterInfo oSelectedDevice;
-        private VideoCaptureDevice CapureDevice;
-        private volatile string sResult;
+	public class Barcammer : IDisposable
+	{
+		public class BarcammerEventArgs : EventArgs
+		{
+			public BarcammerEventArgs(string[] sResults, Rectangle[] oResultRects)
+			{
+				Results = sResults;
+				ResultRects = oResultRects;
+			}
 
-        private IBarcodeReader oReader = new BarcodeReader(null, x => new BitmapSourceLuminanceSource(Convert(x)), null);
+			public Rectangle[] ResultRects { get; set; }
+			public string[] Results { get; set; }
+		}
 
-        public class BarcammerEventArgs : EventArgs
-        {
-            public BarcammerEventArgs(string sResult) => Result = sResult;
-            public string Result { get; set; }
-        }
+		public class BitmapEventArgs : EventArgs
+		{
+			public BitmapEventArgs(Bitmap oBitmap) => Bitmap = oBitmap;
+			public Bitmap Bitmap { get; set; }
+		}
 
-        public class BitmapEventArgs : EventArgs
-        {
-            public BitmapEventArgs(Bitmap oBitmap) => Bitmap = oBitmap;
-            public Bitmap Bitmap { get; set; }
-        }
+		private VideoCaptureDevice oCapureDevice;
+		private IEnumerable<FilterInfo> oDevices = new FilterInfoCollection(FilterCategory.VideoInputDevice).Cast<FilterInfo>();
 
-        protected Barcammer()
-        {
-        }
+		private IBarcodeReader oReader = new BarcodeReader(null, x => new BitmapSourceLuminanceSource(Convert(x)), null);
+		private FilterInfo oSelectedDevice;
 
-        public static Barcammer Create() => new Barcammer();
+		public event EventHandler<BitmapEventArgs> BitmapChanged;
+		public event EventHandler<BarcammerEventArgs> ResultFound;
 
-        public string SelectedDevice => oSelectedDevice.Name;
-        public IEnumerable<string> DeviceNames => Devices.Select(x => x.Name).ToArray();
-        public string Result => sResult;
+		protected Barcammer()
+		{
+		}
 
-        public Barcammer SetDevice(string sName = null)
-        {
-            var oDevice = Devices.FirstOrDefault(x => x.Name == sName) ?? Devices.FirstOrDefault();
+		public IEnumerable<string> DeviceNames => oDevices.Select(x => x.Name).ToArray();
+		public string SelectedDevice => oSelectedDevice.Name;
+		public static Barcammer Create() => new Barcammer();
 
-            if (oDevice != null && oDevice.Name != oSelectedDevice?.Name)
-            {
-                Dispose();
-                oSelectedDevice = oDevice;
-                CapureDevice = new VideoCaptureDevice(oSelectedDevice.MonikerString);
-            }
+		public void Dispose()
+		{
+			if(oCapureDevice?.IsRunning == true)
+				oCapureDevice.Stop();
+		}
 
-            return this;
-        }
+		public Barcammer SetDevice(string sName = null)
+		{
+			var oDevice = oDevices.FirstOrDefault(x => x.Name == sName) ?? oDevices.FirstOrDefault();
+			if(oDevice != null && oDevice.Name != oSelectedDevice?.Name)
+			{
+				Dispose();
+				oSelectedDevice = oDevice;
+				oCapureDevice = new VideoCaptureDevice(oSelectedDevice.MonikerString);
+			}
+			return this;
+		}
 
-        public Barcammer StartWebcamBarcodeCapture()
-        {
-            if (CapureDevice != null)
-            {
-                CapureDevice.VideoResolution = CapureDevice.VideoCapabilities.LastOrDefault();
-                CapureDevice.NewFrame += CapureDevice_NewFrame;
-                CapureDevice.Start();
-            }
+		public Barcammer StartWebcamBarcodeCapture()
+		{
+			try
+			{
+				if(oCapureDevice != null)
+				{
+					oCapureDevice.VideoResolution = oCapureDevice.VideoCapabilities
+						.GroupBy(x => x,
+								 x => x,
+								(x, y) => new { MaxBitCount = y.Max(z => z.BitCount), VideoCapabilities = x })
+						.FirstOrDefault(x => x.VideoCapabilities.BitCount == x.MaxBitCount)
+						.VideoCapabilities;
+					oCapureDevice.NewFrame += CapureDevice_NewFrame;
+					oCapureDevice.Start();
+				}
+			}
+			catch(Exception)
+			{
+				oCapureDevice.VideoResolution = oCapureDevice.VideoCapabilities.FirstOrDefault();
+			}
 
-            return this;
-        }
+			return this;
+		}
 
-        private async void CapureDevice_NewFrame(object sender, NewFrameEventArgs eventArgs)
-        {
-            var oBitmap = eventArgs.Frame.Clone();
-            var oBitmap2 = eventArgs.Frame.Clone();
+		protected virtual void OnBitmapChanged(BitmapEventArgs e) => BitmapChanged?.Invoke(this, e);
+		protected virtual void OnResultFound(BarcammerEventArgs e) => ResultFound?.Invoke(this, e);
 
-            OnBitmapChanged(new BitmapEventArgs((Bitmap)oBitmap));
-            await TryDecode((Bitmap)oBitmap2);
-        }
+		private async void CapureDevice_NewFrame(object sender, NewFrameEventArgs eventArgs)
+		{
+			OnBitmapChanged(new BitmapEventArgs((Bitmap)eventArgs.Frame.Clone()));
+			await Task.Run(() => TryDecode((Bitmap)eventArgs.Frame.Clone()));
+		}
 
-        private async Task TryDecode(Bitmap oFrame)
-        {
-            sResult = await Task.Run(() =>
-            {
-                try
-                {
-                    oReader.Options.PossibleFormats = new BarcodeFormat[]
-                        {
-                            BarcodeFormat.QR_CODE,
-                            BarcodeFormat.All_1D,
-                            BarcodeFormat.DATA_MATRIX
-                        };
+		static private BitmapSource Convert(Bitmap bitmap)
+		{
+			var bitmapData = bitmap.LockBits(new Rectangle(0, 0, bitmap.Width, bitmap.Height), ImageLockMode.ReadOnly, bitmap.PixelFormat);
+			var bitmapSource = BitmapSource.Create(bitmapData.Width,bitmapData.Height, bitmap.HorizontalResolution, bitmap.VerticalResolution, PixelFormats.Bgr24,
+										null, bitmapData.Scan0, bitmapData.Stride * bitmapData.Height, bitmapData.Stride);
+			bitmap.UnlockBits(bitmapData);
+			return bitmapSource;
+		}
 
-                    var oResults = oReader.DecodeMultiple(oFrame);
-                    return oResults.Select(x => x.ToString()).Aggregate((b1, b2) => $@"{b1}, {b2}");
-                }
-                catch (Exception)
-                {
-                    return null;
-                }
-            });
+		private Rectangle ExtractRect(ResultPoint[] oResultPoints)
+		{
+			if(!(oResultPoints?.Any() ?? true))
+				return new Rectangle();
 
-            if (!string.IsNullOrEmpty(sResult))
-                OnResultFound(new BarcammerEventArgs(sResult));
-        }
+			var rect = new Rectangle((int)oResultPoints[0].X, (int)oResultPoints[0].Y, 1, 1);
+			foreach(var oPoint in oResultPoints)
+			{
+				if(oPoint.X < rect.Left)
+					rect = new Rectangle((int)oPoint.X, rect.Y, rect.Width + rect.X - (int)oPoint.X, rect.Height);
+				if(oPoint.X > rect.Right)
+					rect = new Rectangle(rect.X, rect.Y, rect.Width + (int)oPoint.X - rect.X, rect.Height);
+				if(oPoint.Y < rect.Top)
+					rect = new Rectangle(rect.X, (int)oPoint.Y, rect.Width, rect.Height + rect.Y - (int)oPoint.Y);
+				if(oPoint.Y > rect.Bottom)
+					rect = new Rectangle(rect.X, rect.Y, rect.Width, rect.Height + (int)oPoint.Y - rect.Y);
+			}
 
-        public void Dispose()
-        {
-            if (CapureDevice?.IsRunning == true)
-                CapureDevice.Stop();
-        }
+			return rect;
+		}
 
-        private static BitmapSource Convert(Bitmap bitmap)
-        {
-            var bitmapData = bitmap.LockBits(
-                new Rectangle(0, 0, bitmap.Width, bitmap.Height),
-                ImageLockMode.ReadOnly, bitmap.PixelFormat);
+		private void TryDecode(Bitmap oFrame)
+		{
 
-            var bitmapSource = BitmapSource.Create(
-                bitmapData.Width, bitmapData.Height,
-                bitmap.HorizontalResolution, bitmap.VerticalResolution,
-                PixelFormats.Bgr24, null,
-                bitmapData.Scan0, bitmapData.Stride * bitmapData.Height, bitmapData.Stride);
+			try
+			{
+				oReader.Options.PossibleFormats = new BarcodeFormat[]
+				{
+						BarcodeFormat.QR_CODE,
+						BarcodeFormat.All_1D,
+						BarcodeFormat.DATA_MATRIX
+				};
 
-            bitmap.UnlockBits(bitmapData);
-            return bitmapSource;
-        }
+				var oResults = oReader.DecodeMultiple(oFrame);
 
-        public event EventHandler<BarcammerEventArgs> ResultFound;
-        public event EventHandler<BitmapEventArgs> BitmapChanged;
+				if(oResults?.Any() ?? false)
+				{
+					var oResult = oResults.Select(x => new
+					{
+						ResultString = x.ToString(),
+						Rectangle = ExtractRect(x.ResultPoints)
+					});
 
-        protected virtual void OnResultFound(BarcammerEventArgs e) => ResultFound?.Invoke(this, e);
-        protected virtual void OnBitmapChanged(BitmapEventArgs e) => BitmapChanged?.Invoke(this, e);
-    }
+					OnResultFound(new BarcammerEventArgs(oResult.Select(x => x.ResultString).ToArray(),
+														 oResult.Select(x => x.Rectangle).ToArray()));
+				}
+			}
+			catch(Exception)
+			{
+			}
+		}
+	}
 }
